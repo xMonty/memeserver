@@ -19,11 +19,21 @@ import { MyContext } from "./utils/context";
 import { isAuth } from "./utils/isAuth";
 
 @ObjectType()
-class LoginResponse {
+class FieldError {
   @Field()
-  accessToken: string;
-  @Field(() => User)
-  user: User;
+  message: string;
+}
+
+@ObjectType()
+class UserResponse {
+  @Field(() => [FieldError], { nullable: true })
+  errors?: FieldError[];
+
+  @Field(() => User, { nullable: true })
+  user?: User;
+
+  @Field(() => String, { nullable: true })
+  accessToken?: string;
 }
 
 @Resolver()
@@ -39,22 +49,34 @@ export class UserResolvers {
     return User.find();
   }
 
-  @Mutation(() => LoginResponse)
+  @Mutation(() => UserResponse)
   async login(
     @Arg("email") email: string,
     @Arg("password") password: string,
     @Ctx() { res }: MyContext
-  ): Promise<LoginResponse> {
+  ): Promise<UserResponse> {
     const user = await User.findOne({ where: { email } });
 
     if (!user) {
-      throw new Error("could not find user");
+      return {
+        errors: [
+          {
+            message: "Username or password invalid",
+          },
+        ],
+      };
     }
 
     const valid = await compare(password, user.password);
 
     if (!valid) {
-      throw new Error("bad password");
+      return {
+        errors: [
+          {
+            message: "Username or password invalid",
+          },
+        ],
+      };
     }
 
     // login successful
@@ -65,25 +87,34 @@ export class UserResolvers {
     };
   }
 
-  @Mutation(() => Boolean)
+  @Mutation(() => UserResponse)
   async register(
     @Arg("name", () => String) name: string,
     @Arg("email", () => String) email: string,
     @Arg("company", () => String) company: string,
     @Arg("password", () => String) password: string
-  ) {
+  ): Promise<UserResponse> {
     const hashedPassword = await hash(password, 12);
+    let user;
     try {
-      User.insert({
+      const result = await User.insert({
         name: name,
         email: email,
         company: company,
         password: hashedPassword,
       });
+      user = result.raw[0];
     } catch (err) {
-      console.error(err);
-      return false;
+      if (err.code === "23505") {
+        return {
+          errors: [
+            {
+              message: "username already taken",
+            },
+          ],
+        };
+      }
     }
-    return true;
+    return { user };
   }
 }

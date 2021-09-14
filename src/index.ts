@@ -8,6 +8,8 @@ import { createConnection } from "typeorm";
 import cookieParser from "cookie-parser";
 import { verify } from "jsonwebtoken";
 import { User } from "./entity/User";
+import cors from "cors";
+
 import {
   createAccessToken,
   createRefreshToken,
@@ -20,6 +22,27 @@ import {
   await createConnection();
 
   app.use(cookieParser());
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (origin === undefined) {
+          callback(null, true);
+        }
+        const whitelist = [
+          process.env.CORS_ORIGIN,
+          "https://studio.apollographql.com",
+        ];
+
+        if (whitelist.indexOf(origin) !== -1) {
+          callback(null, true);
+        } else {
+          console.log(origin);
+          callback(new Error("Not allowed by CORS"));
+        }
+      },
+      credentials: true,
+    })
+  );
 
   app.get("/", (_, res) => {
     res.send("Hello Word");
@@ -65,7 +88,7 @@ import {
 
   await apolloServer.start();
 
-  apolloServer.applyMiddleware({ app });
+  apolloServer.applyMiddleware({ app, cors: false });
 
   app.listen(4000, () => {
     console.log("Express", "Server started on port: 4000");
