@@ -17,6 +17,7 @@ import {
 } from "./utils/jwt";
 import { MyContext } from "./utils/context";
 import { isAuth } from "./utils/isAuth";
+import { verify } from "jsonwebtoken";
 
 @ObjectType()
 class FieldError {
@@ -47,6 +48,39 @@ export class UserResolvers {
   @UseMiddleware(isAuth)
   users() {
     return User.find();
+  }
+
+  @Query(() => UserResponse)
+  async currentUser(@Ctx() context: MyContext): Promise<UserResponse> {
+    const authorization = context.req.headers["authorization"];
+
+    if (!authorization) {
+      return {
+        errors: [
+          {
+            message: "Not Authorized",
+          },
+        ],
+      };
+    }
+
+    try {
+      const token = authorization.split(" ")[1];
+      const payload: any = verify(token, process.env.ACCESS_TOKEN_SECRET!);
+      const user = await User.findOne(payload.userId);
+      return {
+        user,
+      };
+    } catch (err) {
+      console.log(err);
+      return {
+        errors: [
+          {
+            message: "Not Authorized",
+          },
+        ],
+      };
+    }
   }
 
   @Mutation(() => UserResponse)
@@ -116,5 +150,11 @@ export class UserResolvers {
       }
     }
     return { user };
+  }
+
+  @Mutation(() => Boolean)
+  async logout(@Ctx() { res }: MyContext) {
+    sendRefreshToken(res, "");
+    return true;
   }
 }
